@@ -1,0 +1,4 @@
+name = "UnicodeContour"
+uuid = "86a955c1-1565-4966-8dd5-26981150cda8"
+authors = ["Johan Hidding <j.hidding@esciencecenter.nl>"]
+version = "0.1.0"
