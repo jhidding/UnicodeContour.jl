@@ -23,7 +23,7 @@ and exit point.
 =#
 
 const FULL_BLOCK = '█'
-const EMPTY_BLOCK = '\x00'
+const EMPTY_BLOCK = '\x00'    # Replaced during rendering, not to overdraw lower layers
 
 const GLYPHS =
 [ ((1, 4), '🭍'), (( 1, 5), '🭏'), (( 1, 6), '◣'), (( 1, 7), '🭀'),
@@ -51,6 +51,14 @@ end
 
 @enum Direction UP RIGHT DOWN LEFT
 
+#=
+The WALK_MAP tells us where we go next. We leave a cell at sub-character
+position <i>, given that <i> is included in the superlevel set or not.
+Suppose we leave at pos 6 (lower right corner), depending on whether
+that corner is part of the superlevel set, we need to go to the cell
+to the right, or to the one below. This map also tells us what the
+entry point is for the next cell.
+=#
 const WALK_MAP =
     [ (( 1, false), (   UP, 8)), (( 1, true), ( LEFT, 3))
     , (( 2, false), (   UP, 7)), (( 2, true), (   UP, 7))
@@ -63,18 +71,39 @@ const WALK_MAP =
     , (( 9, false), ( LEFT, 5)), (( 9, true), ( LEFT, 5))
     , ((10, false), ( LEFT, 4)), ((10, true), ( LEFT, 4)) ]
 
+#=
+Position of each point on the boundary of the character. This assumes
+a 1:2 aspect ratio for the terminal cells.
+=# 
 const RING_POS =
     [ 0.0 0.0; 0.25 0.0; 0.5 0.0; 0.5 0.333; 0.5 0.667;
       0.5 1.0; 0.25 1.0; 0.0 1.0; 0.0 0.667; 0.0 0.333 ]
 
+#=
+Positions in between the boundary points. If we detect a sign change
+between any of these points, that decides our entry and exit points
+for the cell.
+=#
 const SCAN_RING =
     [ 0.125 0.0; 0.375 0.0; 0.5 0.167; 0.5 0.5; 0.5 0.833;
       0.375 1.0; 0.125 1.0; 0.0 0.833; 0.0 0.5; 0.0 0.167 ]
 
+"""     filled_contour(func::Function, width::Int, height::Int)
+
+Returns a `Matrix{Char}` with size `[width,height]`. The characters will be
+filled where `func(i,j) > 0` for `i in [1:width], j in [1:height]`.
+
+Characters that are completely empty are given the value `'\x00'`.
+
+On the boundaries, Unicode "Symbols for Legacy Computing" are used to match the
+true contour as close as possible.
+"""
 function filled_contour(func::Function, width::Int, height::Int)
     walk_map = Dict{Tuple{Int,Bool}, Tuple{Direction, Int}}(a => b for (a, b) in WALK_MAP)
-    result = fill('\x7f', (width, height))
+    result = fill('\x7f', (width, height))   # fill with special value
 
+    # First pass: check for completely submerged or completely above ground
+    # cells
     for j in 1:height
         for i in 1:width
             x::Float64 = i / 2.0
@@ -94,6 +123,11 @@ function filled_contour(func::Function, width::Int, height::Int)
         end
     end
 
+    # Second pass: check for remaining '\x7f' values, and trace countours by
+    # walking along a path that should logically cover the contour. If we
+    # encounter an 'impossible' point (maybe due to round-off), we have the
+    # stop-gap measure of computing the sum of the sub-cell points and making
+    # the cell filled or empty based on that result.
     function find_entry(p, q)
         x = Float64[p / 2.0, q]
         w = func((x .+ SCAN_RING[10,:])...)
@@ -174,7 +208,6 @@ function filled_contour(func::Function, width::Int, height::Int)
     result
 end
 
-
 function example()
     himmelblau(x, y) = (x*x + y - 11.0)^2 + (x + y*y - 7.0)^2
     size = [51, 25]
@@ -195,4 +228,3 @@ function example()
     end
     println("\x1b[m")
 end
-
